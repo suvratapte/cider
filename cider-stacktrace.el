@@ -70,6 +70,7 @@ If nil, messages will not be wrapped.  If truthy but non-numeric,
 (defvar-local cider-stacktrace-filters nil)
 (defvar-local cider-stacktrace-cause-visibility nil)
 (defvar-local cider-stacktrace-positive-filters nil)
+(defvar-local cider-stacktrace-spec-regions '())
 
 (defconst cider-error-buffer "*cider-error*")
 
@@ -173,6 +174,7 @@ The error types are represented as strings."
     (define-key map "r" #'cider-stacktrace-toggle-repl)
     (define-key map "t" #'cider-stacktrace-toggle-tooling)
     (define-key map "d" #'cider-stacktrace-toggle-duplicates)
+    (define-key map "s" #'cider-stacktrace-toggle-spec)
     (define-key map "p" #'cider-stacktrace-show-only-project)
     (define-key map "a" #'cider-stacktrace-toggle-all)
     (define-key map "1" #'cider-stacktrace-cycle-cause-1)
@@ -204,6 +206,7 @@ The error types are represented as strings."
         ["Show/hide REPL frames" cider-stacktrace-toggle-repl]
         ["Show/hide tooling frames" cider-stacktrace-toggle-tooling]
         ["Show/hide duplicate frames" cider-stacktrace-toggle-duplicates]
+        ["Show/hide spec error details" cider-stacktrace-toggle-spec]
         ["Toggle only project frames" cider-stacktrace-show-only-project]
         ["Show/hide all frames" cider-stacktrace-toggle-all]))
     map))
@@ -224,7 +227,7 @@ The error types are represented as strings."
 ;; Stacktrace filtering
 
 (defvar cider-stacktrace--all-negative-filters
-  '(clj tooling dup java repl)
+  '(clj tooling dup java repl spec)
   "Filters that remove stackframes.")
 
 (defvar cider-stacktrace--all-positive-filters
@@ -513,6 +516,11 @@ When it reaches 3, it wraps to 0."
   (interactive)
   (cider-stacktrace-toggle 'dup))
 
+(defun cider-stacktrace-toggle-spec ()
+  "Toggle display of spec error details."
+  (interactive)
+  (cider-stacktrace-toggle 'spec))
+
 ;; Text button functions
 
 (defun cider-stacktrace-filter (button)
@@ -590,7 +598,8 @@ prompt and whether to use a new window.  Similar to `cider-find-var'."
 INDENT is a string to insert before each line.  When INDENT is nil, first
 line is not indented and INDENT defaults to a white-spaced string with
 length given by `current-column'."
-  (let ((text (if fontify
+  (let ((beg-line (line-number-at-pos))
+        (text (if fontify
                   (cider-font-lock-as-clojure text)
                 text))
         (do-first indent)
@@ -608,7 +617,9 @@ length given by `current-column'."
       (when (and (numberp cider-stacktrace-fill-column))
         (setq-local fill-column cider-stacktrace-fill-column))
       (setq-local fill-prefix indent)
-      (fill-region beg (point)))))
+      (fill-region beg (point)))
+    (add-to-list 'cider-stacktrace-spec-regions
+                 (cons beg-line (line-number-at-pos)))))
 
 (defun cider-stacktrace-render-filters (buffer special-filters filters)
   "Emit into BUFFER toggle buttons for each of the FILTERS.
@@ -869,7 +880,7 @@ through the `cider-stacktrace-suppressed-errors' variable."
        buffer
        `(("Project-Only" project) ("All" all))
        `(("Clojure" clj) ("Java" java) ("REPL" repl)
-         ("Tooling" tooling) ("Duplicates" dup)))
+         ("Tooling" tooling) ("Duplicates" dup) ("Spec" spec)))
       (insert "\n")
       ;; Option to suppress internal/middleware errors
       (when error-types
